@@ -1,14 +1,13 @@
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 
-# from .. import db
-# from app.db import engine
-from .engine import engine
-# from app.db.engine import engine
 
+from .engine import engine
+from typing import Generator
 SessionLocal = sessionmaker(bind = engine, autocommit = False, autoflush = False, expire_on_commit=False)
 
-def get_db():
+@contextmanager
+def get_db()->Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db

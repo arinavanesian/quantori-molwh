@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import Dict, List, Optional, Literal
@@ -9,6 +9,7 @@ import tempfile
 import os
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text 
 
 from .db.engine import engine
 from .db.Base import Base
@@ -18,10 +19,13 @@ from .db import crud
 from .modelbody import (
     MoleculeResponse, 
     MoleculeListResponse, 
-    MoleculeRequest, 
+    MoleculeRequest,
+    PaginatedResponse, 
     SimilarityResponse)
 
 from .models.Users import MoleculeWarehouse
+from .auth import routes as auth_routes
+
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
 # from rdkit.Chem import Draw
@@ -54,6 +58,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.include_router(auth_routes.router)
 
 
 # ===== Dependencies =====
@@ -101,7 +106,7 @@ def get_iupac_name(smiles_string: str) -> Optional[str]:
 # TODO: Check
 def validate_existing_molecule(
         smiles: str,
-        db_session: Session = Depends(session_scope))->str:
+        db_session: Session = Depends(get_db))->str:
     """Validate that a molecule exists in the store
     using either its IUPAC name or UUID as the key."""
     checking_molecule = crud.get_molecule_by_smiles(db_session, smiles)
@@ -126,7 +131,7 @@ def create_store():
 @app.post("/add", response_model=MoleculeResponse, status_code=status.HTTP_201_CREATED)
 def add_molecule(
     mol_req: MoleculeRequest,
-    db_session:Session = Depends(session_scope)
+    db_session:Session = Depends(get_db)
 ):
     """Adds a new molecule to the store """
     try:
@@ -167,7 +172,7 @@ def add_molecule(
 @app.get("/get/{smiles}", response_model=MoleculeResponse)
 def get_molecule(
     smiles: str,
-    db_session: Session = Depends(session_scope)):
+    db_session: Session = Depends(get_db)):
     """Get a molecule by its key (UUID or IUPAC name)"""
     db_molecule = crud.get_molecule_by_smiles(db_session=db_session, smiles=smiles)
 
@@ -188,7 +193,7 @@ def fetch_iupac(smiles: str):
 def update_molecule(
     smiles: str,
     mol: MoleculeRequest = ...,
-    db_session:Session = Depends(session_scope)
+    db_session:Session = Depends(get_db)
 ):
     """Update an existing molecule by  key SMILES"""
     try:
@@ -217,7 +222,7 @@ def update_molecule(
 @app.delete("/delete/{mol_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_molecule(
     mol_uuid: str = Depends(validate_existing_molecule),
-    db_session: Session = Depends(session_scope)
+    db_session: Session = Depends(get_db)
 ):
     """Delete a molecule by psasing a UUID"""
     deleted = crud.delete_molecule(db_session, mol_uuid)
@@ -228,31 +233,80 @@ def delete_molecule(
         )
     logger.info(f"Deleted molecule {mol_uuid}")
 
-@app.get("/list", response_model=MoleculeListResponse)
+@app.get("/list_paged", response_model=MoleculeListResponse)
+def list_molecules_paginated(
+          db_session:Session,
+          skip:int = 0,
+          limit:int = 50)->PaginatedResponse:
+        try:
+            result = crud.get_molecules_paginated(db_session, skip, limit)
+            molecules_list = [
+                MoleculeResponse(
+                    uuid=mol.uuid,
+                    smiles=mol.smiles,
+                    iupac_name=mol.iupac_name,
+                    # mol_bin = pickle.dumps(mol)
+                ) 
+                for mol in result["molecules"]
+            ]
+            
+            return PaginatedResponse(
+                total_count=result["total_count"],
+                molecules=molecules_list,
+                page=result["page"],
+                per_page=result["per_page"],
+                total_pages=result["total_pages"],
+                has_next=result["has_next"],
+                has_prev=result["has_prev"])
+        except Exception as e:
+            logger.error(f"Error in get_molecules_paginated: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve paginated list of molecules"
+            )
+      
+     
+@app.get("/molecules/", response_model=PaginatedResponse)
 def list_molecules(
-    limit: int = 100,
-    offset: int = 0,
-    db_session: Session = Depends(session_scope)
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
+    db_session: Session = Depends(get_db)
 ):
-    """List all molecules with pagination"""
-    db_molecule_list = crud.list_molecules(
-        db_session=db_session,
-        skip = offset,
-        limit = limit)
-    mol_resp_list  = [
-        MoleculeResponse(
-            uuid=db_mol.uuid,
-            iupac_name=db_mol.iupac_name,
-            smiles = db_mol.smiles
+    """List molecules with pagination and count"""
+    try:
+        result = crud.list_molecules(db_session, skip, limit)
+        
+        # Convert to response models
+        molecule_responses = [
+            MoleculeResponse(
+                uuid=molecule.uuid,
+                smiles=molecule.smiles,
+                iupac_name=molecule.iupac_name
+            )
+            for molecule in result['molecules']
+        ]
+        
+        return PaginatedResponse(
+            molecules=molecule_responses,
+            total_count=result['total_count'],
+            page=result['page'],
+            per_page=result['per_page'],
+            total_pages=result['total_pages'],
+            has_next=result['has_next'],
+            has_prev=result['has_prev']
         )
-        for db_mol in db_molecule_list
-    ]
-    return MoleculeListResponse(molecules=mol_resp_list, count=len(mol_resp_list))
+        
+    except Exception as e:
+        logger.error(f"Error listing molecules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve molecules"
+        )
 
 @app.post("/search/{query_smiles}", response_model=MoleculeListResponse)
 def substructure_search(
     query_smiles: str,
-    db_session: Session = Depends(session_scope),
+    db_session: Session = Depends(get_db),
 ):
     """Search for molecules containing the query substructure"""
     query_mol = validate_smiles(query_smiles)
@@ -267,7 +321,7 @@ def substructure_search(
 @app.post("/search/similarity", response_model=SimilarityResponse)
 def similarity_search(
     query_smiles: str,
-    db_session: Session = Depends(session_scope),
+    db_session: Session = Depends(get_db),
     threshold: float = 0.0,
     limit:int = 10,
     top_k:int =50
@@ -293,26 +347,28 @@ def similarity_search(
 
 
 
-@app.get("/health")
-def health_check(db_session: Session = Depends(session_scope)):
 
+@app.get("/health")
+def health_check(db_session: Session = Depends(get_db)):
     """Health check endpoint"""
     try:
+        db_session.execute(text("SELECT 1"))  
         total_count = db_session.query(MoleculeWarehouse).count()
-        return {"status": "healthy", 
+        return {
+            "status": "healthy", 
             "molecule_count": total_count,
-            "databse":"connected"}
-
+            "database": "connected"
+        }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connection failed"
+            detail=f"Database connection failed: {str(e)}"
         )
-
 
     
 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    # add a molecule

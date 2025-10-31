@@ -6,6 +6,7 @@ class MoleculeResponse(BaseModel):
     uuid: str
     smiles: str
     iupac_name: Optional[str] = None
+    # mol_binary: Optional[bytes] = Field(None, aliads = "molbin", description="Binary representation of the molecule")
     molecular_weight: Optional[float] = Field(None,alias = "molwt", description="Calculated Molecular Weight")
     log_p: Optional[float] = Field(None, alias ="logp",  description="Calculated Octanol-Water Partition Coefficient")
     tpsa: Optional[float] = Field(None, alias = "tpsa", description="Calculated Topological Polar Surface Area")
@@ -24,6 +25,16 @@ class MoleculeRequest(BaseModel):
             raise ValueError('Invalid SMILES string')
         return v
 
+class PaginatedResponse(BaseModel):
+    total_count: int
+    molecules: List[MoleculeResponse]
+    page:int
+    per_page:int
+    total_pages:int
+    has_next: bool
+    has_prev: bool
+
+    
 
 class SimilarityResponse(BaseModel):
     molecule: MoleculeResponse

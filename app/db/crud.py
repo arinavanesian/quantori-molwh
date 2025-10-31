@@ -1,15 +1,17 @@
 from ..models.Users import Users,MoleculeWarehouse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from typing import List, Optional, Tuple, TypeVar
+from typing import List, Dict, Optional, Tuple, TypeVar
 
 import heapq
 import pickle
-
+from ..utility import get_molecules_paginated
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, MACCSkeys
 
-from ..modelbody import MoleculeRequest, MoleculeResponse,MoleculeListResponse, SimilarityResponse
+from ..modelbody import (MoleculeRequest, MoleculeResponse,
+                         MoleculeListResponse, PaginatedResponse, 
+                         SimilarityResponse)
 
 T = TypeVar("T", bound=MoleculeWarehouse)
 
@@ -50,6 +52,7 @@ def get_cannonical(smiles:str)->str:
 def get_dataCount(db_session:Session)->int:
      count = db_session.query(MoleculeWarehouse).count()
      return count
+
 # TODO: return a tuple of list and it's length 
 def list_molecules(
           db_session:Session,
@@ -57,6 +60,54 @@ def list_molecules(
           limit:int = 50)->List[T]:
      list_molecules = db_session.query(MoleculeWarehouse).offset(skip).limit(limit).all()
      return list_molecules
+          
+def get_molecules_paginated(db_session: Session, skip: int, limit: int) -> dict:
+        """Get paginated molecules with metadata."""
+        query = db_session.query(MoleculeWarehouse)
+        total_count = query.count()
+        molecules = query.offset(skip).limit(limit).all()
+        page = (skip // limit) + 1 if limit > 0 else 1
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+        return {
+            "molecules": molecules,
+            "total_count": total_count,
+            "page": page,
+            "per_page": limit,
+            "total_pages": total_pages,
+            "has_next": skip + limit < total_count,
+            "has_prev": skip > 0}
+
+def get_molecules_paginated(
+    db_session: Session, 
+    skip: int = 0, 
+    limit: int = 100
+) -> Dict:
+    """
+    Get paginated molecules with metadata.
+    
+    Returns raw database models - this is the CORRECT approach for CRUD layer.
+    """
+    try:
+        query = db_session.query(MoleculeWarehouse)
+        total_count = query.count()
+        molecules = query.offset(skip).limit(limit).all()
+        
+        page = (skip // limit) + 1 if limit > 0 else 1
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+        
+        return {
+            "molecules": molecules,
+            "total_count": total_count,
+            "page": page,
+            "per_page": limit,
+            "total_pages": total_pages,
+            "has_next": skip + limit < total_count,
+            "has_prev": skip > 0 
+        }
+        
+    except Exception as e:
+        print(f"Error in get_molecules_paginated: {e}")
+        raise
 
 #TODO: passing the molreq
 def create_molecule(

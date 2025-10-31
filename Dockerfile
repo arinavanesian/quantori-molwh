@@ -3,7 +3,7 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 # Copy requirements from the project `app/` directory (this repository uses `app/` not `src/`)
-COPY ./app/requirements.txt .
+COPY ./requirements.txt .
 
 # Install build deps only for pip compile/build then remove them to keep the image small
 RUN apt-get update \
@@ -24,6 +24,6 @@ ENV PYTHONPATH=/app
 
 # Run the FastAPI/uvicorn app from `app.main:app`
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# CMD ["python", "-m", "app.main"]
+CMD ["python", "-m", "app.main"]
