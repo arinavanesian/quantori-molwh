@@ -5,7 +5,6 @@ from typing import List, Dict, Optional, Tuple, TypeVar
 
 import heapq
 import pickle
-from ..utility import get_molecules_paginated
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, MACCSkeys
 

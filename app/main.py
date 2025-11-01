@@ -233,11 +233,11 @@ def delete_molecule(
         )
     logger.info(f"Deleted molecule {mol_uuid}")
 
-@app.get("/list_paged", response_model=MoleculeListResponse)
+@app.get("/list_paged", response_model=PaginatedResponse)
 def list_molecules_paginated(
-          db_session:Session,
+          db_session:Session = Depends(get_db),
           skip:int = 0,
-          limit:int = 50)->PaginatedResponse:
+          limit:int = 50):
         try:
             result = crud.get_molecules_paginated(db_session, skip, limit)
             molecules_list = [
@@ -266,42 +266,33 @@ def list_molecules_paginated(
             )
       
      
-@app.get("/molecules/", response_model=PaginatedResponse)
+@app.get("/molecules/", response_model=MoleculeListResponse)
 def list_molecules(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     db_session: Session = Depends(get_db)
-):
+)->MoleculeListResponse:
     """List molecules with pagination and count"""
     try:
         result = crud.list_molecules(db_session, skip, limit)
-        
-        # Convert to response models
-        molecule_responses = [
+        molecules = [
             MoleculeResponse(
-                uuid=molecule.uuid,
-                smiles=molecule.smiles,
-                iupac_name=molecule.iupac_name
-            )
-            for molecule in result['molecules']
+                uuid=mol.uuid,
+                smiles=mol.smiles,
+                iupac_name=mol.iupac_name,
+                # mol_bin = pickle.dumps(mol)
+            ) 
+            for mol in result["molecules"]
         ]
-        
-        return PaginatedResponse(
-            molecules=molecule_responses,
-            total_count=result['total_count'],
-            page=result['page'],
-            per_page=result['per_page'],
-            total_pages=result['total_pages'],
-            has_next=result['has_next'],
-            has_prev=result['has_prev']
-        )
-        
+        total_count = crud.get_dataCount(db_session)
+        return MoleculeListResponse(molecules=result, count=total_count)
     except Exception as e:
-        logger.error(f"Error listing molecules: {e}")
+        logger.error(f"Error in list_molecules: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve molecules"
+            detail="Failed to retrieve list of molecules"
         )
+        
 
 @app.post("/search/{query_smiles}", response_model=MoleculeListResponse)
 def substructure_search(
@@ -371,4 +362,3 @@ def health_check(db_session: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    # add a molecule
