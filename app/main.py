@@ -76,7 +76,7 @@ def validate_smiles(smiles:str) -> Chem.Mol:
 
 def get_MolFromSmiles(smiles:str)->Chem.Mol:
     return validate_smiles(smiles)
-   
+
 def get_iupac_name(smiles_string: str) -> Optional[str]:
     
     """
@@ -119,13 +119,13 @@ def validate_existing_molecule(
 
 
 
-@app.post("/store/create", status_code=status.HTTP_201_CREATED)
-def create_store():
-    """Create a new empty molecule store"""
-    global molecule_store
-    molecule_store = pd.DataFrame(columns=["uuid", "iupac_name", "smiles", "Mol"]).set_index("uuid")
-    logger.info("New molecule store created")
-    return {"detail": "Molecule store created successfully!"}
+# @app.post("/store/create", status_code=status.HTTP_201_CREATED)
+# def create_store():
+#     """Create a new empty molecule store"""
+#     global molecule_store
+#     molecule_store = pd.DataFrame(columns=["uuid", "iupac_name", "smiles", "Mol"]).set_index("uuid")
+#     logger.info("New molecule store created")
+#     return {"detail": "Molecule store created successfully!"}
 
 # TODO: add dependency validate_existing
 @app.post("/add", response_model=MoleculeResponse, status_code=status.HTTP_201_CREATED)
@@ -141,16 +141,15 @@ def add_molecule(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Molecule with the same SMILES already exists"
             )
-        mol_req = validate_smiles(mol_req.smiles)
+        validated_mol = validate_smiles(mol_req.smiles)
     
         molecule_uuid = str(uuid.uuid4())
-        iupac_name = mol_req.iupac_name or get_iupac_name(mol_req.smiles)
-        Mol = Chem.MolFromSmiles(mol_req.smiles)
+        iupac_name = get_iupac_name(mol_req.smiles) 
         added_molecule = crud.create_molecule(
             db_session=db_session,
             uuid=molecule_uuid,
             iupac_name=iupac_name,
-            mol=Mol
+            mol=validated_mol
         )
         mol_resp = MoleculeResponse(
             uuid=molecule_uuid,
@@ -282,10 +281,10 @@ def list_molecules(
                 iupac_name=mol.iupac_name,
                 # mol_bin = pickle.dumps(mol)
             ) 
-            for mol in result["molecules"]
+            for mol in result
         ]
         total_count = crud.get_dataCount(db_session)
-        return MoleculeListResponse(molecules=result, count=total_count)
+        return MoleculeListResponse(molecules=molecules, count=total_count)
     except Exception as e:
         logger.error(f"Error in list_molecules: {e}")
         raise HTTPException(

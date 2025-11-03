@@ -1,3 +1,4 @@
+from fastapi import logger
 from ..models.Users import Users,MoleculeWarehouse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -31,10 +32,26 @@ def get_molecule_by_iupac(db_session:Session, iupac_name:str)->Optional[T]:
 def get_Mols(db_session:Session,skip:int = 0, limit:int=0)->List[Chem.Mol]:
      result = []
      molecules = list_molecules(db_session,skip = skip, limit=limit)
-
+     
      for mol_db in molecules:
-          Mol = pickle.loads(mol_db) if mol_db else None
+          Mol = None
+          try:
+               if hasattr(mol_db, 'mol_binary') and mol_db.mol_binary:
+                    Mol = pickle.loads(mol_db.mol_bin)
+               else:
+                    Mol = Chem.MolFromSmiles(mol_db.smiles)
+          
+          except (pickle.PickleError, AttributeError, EOFError) as e:
+               logger.warning(f"Failed to unpickle Mol for molecule {mol_db.uuid}: {e}")
+               print(f"Error deserializing molecule {mol_db.uuid}: {e}")
+
+               Mol = Chem.MolFromSmiles(mol_db.smiles) if mol_db.smiles else None
+          if not Mol:
+            logger.warning(f"Could not create Mol object for molecule {mol_db.uuid}\
+                            with SMILES: {mol_db.smiles}")
+
           result.append((mol_db.uuid,mol_db.smiles, mol_db.iupac_name, Mol))
+          
      return result
 
 def get_Mols_all(db_session:Session):

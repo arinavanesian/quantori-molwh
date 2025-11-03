@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import (
     String, Integer, Column, 
     DateTime, ForeignKey)
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import Enum as SQLEnum, LargeBinary
 
 from enum import Enum
 from datetime import datetime
@@ -69,6 +69,7 @@ class Query(Base):
     user_id:Mapped[int]= mapped_column(ForeignKey("users.id"), nullable=False)
     molecule_smiles:Mapped[str]= mapped_column(ForeignKey("molecule_store.uuid"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default= datetime.now, nullable=False)
+    mol_binary:Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
 
     user: Mapped["Users"] = relationship("Users", back_populates="queries")
     molecule: Mapped["MoleculeWarehouse"] = relationship("MoleculeWarehouse", back_populates="queries")
