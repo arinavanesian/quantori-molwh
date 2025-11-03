@@ -103,20 +103,20 @@ def get_iupac_name(smiles_string: str) -> Optional[str]:
         logger.error(f"Unexpected error in IUPAC lookup: {e}")
         return None
 
-# TODO: Check
+# TODO: Check for both smiles and uuid
 def validate_existing_molecule(
-        smiles: str,
+        uuid: str,
         db_session: Session = Depends(get_db))->str:
     """Validate that a molecule exists in the store
     using either its IUPAC name or UUID as the key."""
-    checking_molecule = crud.get_molecule_by_smiles(db_session, smiles)
-    if not checking_molecule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Molecule with '{smiles}' not found"
-        )
-    return checking_molecule
-
+    checking_molecule = crud.get_molecule_by_uuid(db_session, uuid)
+    if checking_molecule:
+        return checking_molecule.uuid
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Molecule with '{uuid}' not found"
+    )
+    
 
 
 # @app.post("/store/create", status_code=status.HTTP_201_CREATED)

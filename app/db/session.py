@@ -6,7 +6,6 @@ from .engine import engine
 from typing import Generator
 SessionLocal = sessionmaker(bind = engine, autocommit = False, autoflush = False, expire_on_commit=False)
 
-# @contextmanager
 def get_db()->Generator[Session, None, None]:
     db = SessionLocal()
     try:
