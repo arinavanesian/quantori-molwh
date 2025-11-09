@@ -1,19 +1,14 @@
 from fastapi import FastAPI, HTTPException, Depends, Query, status
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, field_validator
-from typing import Dict, List, Optional, Literal
-import bisect
+from typing import List, Optional
 import logging
 from contextlib import asynccontextmanager
-import tempfile
-import os
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text 
 
 from .db.engine import engine
 from .db.Base import Base
-from .db.session import session_scope, get_db
+from .db.session import get_db
 from .db import crud
 
 from .modelbody import (
@@ -27,12 +22,9 @@ from .models.Users import MoleculeWarehouse
 from .auth import routes as auth_routes
 
 from rdkit import Chem
-from rdkit.Chem import MACCSkeys
 # from rdkit.Chem import Draw
-from rdkit import DataStructs
 import pubchempy as pcp
 
-import pandas as pd
 import uuid
 
 import uvicorn
